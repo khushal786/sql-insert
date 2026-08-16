@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insert Trace — SQL column mapper</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg: #0B0E13;
+    --panel: #12161D;
+    --panel-2: #171C25;
+    --line: #232A36;
+    --ink: #E7EAF0;
+    --ink-dim: #8A93A6;
+    --ink-faint: #5B6478;
+    --amber: #E3A542;
+    --teal: #4FD8C4;
+    --violet: #B79CF2;
+    --rose: #F27D9C;
+    --slate: #7B8AA6;
+    --error: #F2685E;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 28px 20px 60px;
+  }
+
+  .wrap{ max-width: 980px; margin: 0 auto; }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .glyph{
+    font-family: var(--mono);
+    font-weight:700;
+    color: var(--bg);
+    background: var(--amber);
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+  }
+  h1{
+    font-size: 19px;
+    font-weight: 600;
+    margin:0;
+    letter-spacing: -0.2px;
+  }
+  .tagline{
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    font-family: var(--mono);
+  }
+
+  /* ---------- Mode switch ---------- */
+  .mode-switch{
+    display:flex;
+    gap:6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 4px;
+    border-radius: 9px;
+    margin-bottom: 20px;
+    width: fit-content;
+  }
+  .mode-btn{
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--ink-dim);
+    cursor: pointer;
+    letter-spacing: 0.3px;
+  }
+  .mode-btn.active{
+    background: var(--amber);
+    color: #1A1305;
+  }
+  .mode-arrow{
+    color: var(--ink-faint);
+    font-size: 13px;
+    display:flex;
+    align-items:center;
+    padding: 0 2px;
+  }
+
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  /* ---------- Panels (shared) ---------- */
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .panel + .panel{ margin-top: 18px; }
+
+  .panel-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 10px 14px;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .dots{ display:flex; gap:5px; }
+  .dots span{ width:8px; height:8px; border-radius:50%; background: var(--line); }
+
+  textarea{
+    width: 100%;
+    min-height: 170px;
+    background: transparent;
+    color: var(--ink);
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.65;
+    padding: 16px;
+    tab-size: 2;
+  }
+  textarea::placeholder{ color: var(--ink-faint); }
+
+  .toolbar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--panel-2);
+    flex-wrap: wrap;
+  }
+
+  button{
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: border-color .15s ease, transform .05s ease;
+  }
+  button:hover{ border-color: var(--ink-faint); }
+  button:active{ transform: translateY(1px); }
+  button.primary{
+    background: var(--amber);
+    border-color: var(--amber);
+    color: #1A1305;
+  }
+  button.primary:hover{ border-color: var(--amber); filter: brightness(1.06); }
+  button.ghost{
+    background: transparent;
+    color: var(--ink-dim);
+  }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+  .spacer{ flex:1; }
+  .hint{ font-size: 11.5px; color: var(--ink-faint); font-family: var(--mono); }
+
+  /* ---------- Status / error ---------- */
+  .banner{
+    display:none;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: var(--mono);
+    margin-top: 14px;
+    border: 1px solid;
+  }
+  .banner.error{
+    display:block;
+    background: rgba(242,104,94,0.08);
+    border-color: rgba(242,104,94,0.35);
+    color: #FFA79F;
+  }
+  .banner.warn{
+    display:block;
+    background: rgba(227,165,66,0.08);
+    border-color: rgba(227,165,66,0.35);
+    color: #F0C27E;
+  }
+
+  /* ---------- Trace results ---------- */
+  .results{ margin-top: 22px; display:none; }
+  .results.show{ display:block; }
+
+  .meta-row{
+    display:flex;
+    align-items:center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-dim);
+  }
+  .meta-row b{ color: var(--ink); font-weight:600; }
+  .meta-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+
+  .tabs{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    margin-bottom: 14px;
+  }
+  .tab{
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink-dim);
+    cursor: pointer;
+  }
+  .tab.active{
+    background: var(--amber);
+    border-color: var(--amber);
+    color: #1A1305;
+    font-weight: 600;
+  }
+  .tab .warn-dot{
+    display:inline-block;
+    width:6px; height:6px;
+    border-radius:50%;
+    background: var(--error);
+    margin-left:6px;
+  }
+  .tab .tab-x{
+    margin-left: 8px;
+    color: inherit;
+    opacity: 0.6;
+    font-weight: 700;
+  }
+  .tab .tab-x:hover{ opacity: 1; }
+
+  .map-card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .map-card-head{
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .map-card-head .table-name{
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .map-card-head .table-name span{ color: var(--ink-faint); font-weight: 400;}
+
+  .grid{
+    display: grid;
+    grid-template-columns: minmax(140px, 0.85fr) 28px minmax(140px, 1.15fr) auto;
+    align-items: stretch;
+  }
+  .grid-row{ display:contents; }
+  .grid-row .col, .grid-row .val, .grid-row .wire, .grid-row .actions{
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 13px;
+    display:flex;
+    align-items:center;
+    min-width:0;
+  }
+  .grid-row:last-child .col, .grid-row:last-child .val,
+  .grid-row:last-child .wire, .grid-row:last-child .actions{ border-bottom:none; }
+
+  .grid-row:nth-child(odd) .col, .grid-row:nth-child(odd) .val,
+  .grid-row:nth-child(odd) .wire, .grid-row:nth-child(odd) .actions{
+    background: rgba(255,255,255,0.012);
+  }
+
+  .col{
+    justify-content: flex-end;
+    text-align: right;
+    color: var(--amber);
+    font-weight: 500;
+    gap: 8px;
+  }
+  .col .idx{
+    color: var(--ink-faint);
+    font-size: 10.5px;
+    font-weight: 400;
+  }
+  .wire{
+    justify-content:center;
+    color: var(--ink-faint);
+    position: relative;
+  }
+  .wire::before{
+    content:"";
+    position:absolute;
+    left:0; right:0; top:50%;
+    border-top: 1px dashed var(--line);
+  }
+  .wire svg{ position:relative; z-index:1; background: var(--panel); }
+  .grid-row:nth-child(odd) .wire svg{ background: #12161D; }
+
+  .val{ gap:10px; overflow:hidden; }
+  .val .value-text{
+    overflow:hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .type-badge{
+    flex-shrink:0;
+    font-size: 9.5px;
+    font-family: var(--sans);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1.5;
+  }
+  .type-string .value-text{ color: var(--teal); }
+  .type-string .type-badge{ background: rgba(79,216,196,0.12); color: var(--teal); }
+  .type-number .value-text{ color: var(--ink); }
+  .type-number .type-badge{ background: rgba(123,138,166,0.15); color: var(--slate); }
+  .type-null .value-text{ color: var(--ink-faint); font-style: italic; }
+  .type-null .type-badge{ background: rgba(91,100,120,0.15); color: var(--ink-faint); }
+  .type-boolean .value-text{ color: var(--rose); }
+  .type-boolean .type-badge{ background: rgba(242,125,156,0.12); color: var(--rose); }
+  .type-expr .value-text{ color: var(--violet); }
+  .type-expr .type-badge{ background: rgba(183,156,242,0.12); color: var(--violet); }
+
+  .actions{ justify-content:flex-end; }
+  .copy-btn{
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink-faint);
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-family: var(--sans);
+    font-weight: 600;
+  }
+  .copy-btn:hover{ color: var(--ink); border-color: var(--ink-faint); }
+
+  .grid-row.mismatch .col{ color: var(--error); }
+  .grid-row.mismatch .val .value-text{ color: var(--ink-faint); font-style: italic; }
+
+  /* ---------- Build mode ---------- */
+  .field-row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .field-row:last-child{ border-bottom:none; }
+  .field-row input[type="text"]{
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+  }
+  .field-row input[type="text"]:focus{ border-color: var(--amber); }
+  .field-row .col-name{ flex: 0 0 220px; color: var(--amber); font-weight:500; }
+  .field-row .remove-field{
+    color: var(--ink-faint);
+    border: none;
+    background: transparent;
+    font-size: 15px;
+    padding: 4px 8px;
+    cursor:pointer;
+  }
+  .field-row .remove-field:hover{ color: var(--error); }
+  .field-row .drag-idx{
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    width: 18px;
+    flex-shrink:0;
+  }
+
+  select{
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--ink-dim);
+    font-family: var(--sans);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 6px 8px;
+    outline: none;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .record-cell{
+    flex: 1;
+    min-width: 0;
+  }
+  .record-cell input[type="text"]{ width: 100%; }
+  .record-cell .null-placeholder{
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    font-style: italic;
+    padding: 7px 2px;
+  }
+  .record-cell select.bool-select{ width: 100%; }
+
+  .build-footer{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding: 12px 14px;
+    background: var(--panel-2);
+    flex-wrap: wrap;
+  }
+
+  .sql-output{
+    margin-top: 18px;
+    display:none;
+  }
+  .sql-output.show{ display:block; }
+  .sql-output pre{
+    margin:0;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .sql-output .kw{ color: var(--amber); font-weight:600; }
+  .sql-output .tbl{ color: var(--ink); font-weight:600; }
+  .sql-output .strv{ color: var(--teal); }
+  .sql-output .numv{ color: var(--ink); }
+  .sql-output .nullv{ color: var(--ink-faint); font-style: italic; }
+  .sql-output .boolv{ color: var(--rose); }
+  .sql-output .exprv{ color: var(--violet); }
+  .sql-output .cmt{ color: var(--ink-faint); }
+
+  footer{
+    margin-top: 30px;
+    text-align:center;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    font-family: var(--mono);
+  }
+  footer .signature{
+    margin-top: 8px;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+  }
+  footer .signature span{
+    color: var(--amber);
+    font-weight: 600;
+  }
+
+  @media (max-width: 640px){
+    .grid{ grid-template-columns: minmax(100px, 0.9fr) 18px minmax(100px, 1.1fr) 0; }
+    .actions{ display:none; }
+    .col, .val{ font-size: 12px; padding: 10px 8px; }
+    .field-row{ flex-wrap: wrap; }
+    .field-row .col-name{ flex: 1 1 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <span class="glyph">SQL</span>
+      <div>
+        <h1>Insert Trace</h1>
+      </div>
+    </div>
+    <div class="tagline">column ↔ value mapper, both directions</div>
+  </header>
+
+  <div class="mode-switch">
+    <button class="mode-btn active" id="modeTraceBtn">Trace SQL → table</button>
+    <span class="mode-arrow">⇄</span>
+    <button class="mode-btn" id="modeBuildBtn">Build table → SQL</button>
+  </div>
+
+  <!-- ===================== TRACE VIEW ===================== -->
+  <div class="view active" id="traceView">
+
+    <div class="panel">
+      <div class="panel-head">
+        <span>query input</span>
+        <div class="dots"><span></span><span></span><span></span></div>
+      </div>
+      <textarea id="sqlInput" placeholder="INSERT INTO customer_orders (order_id, customer_name, status, amount, created_at)
+VALUES (10245, 'Rao, Nikhil', 'PENDING', 1899.50, NOW());"></textarea>
+      <div class="toolbar">
+        <button class="primary" id="parseBtn">Trace columns →</button>
+        <button class="ghost" id="sampleBtn">Load multi-row example</button>
+        <button class="ghost" id="clearBtn">Clear</button>
+        <div class="spacer"></div>
+        <span class="hint">supports multiple VALUES rows &amp; multiple statements</span>
+      </div>
+    </div>
+
+    <div class="banner" id="traceBanner"></div>
+
+    <div class="results" id="results">
+      <div class="meta-row" id="metaRow"></div>
+      <div class="tabs" id="tabs"></div>
+      <div class="map-card">
+        <div class="map-card-head">
+          <div class="table-name" id="tableName"></div>
+          <button class="copy-btn" id="copyAllBtn">COPY AS JSON</button>
+        </div>
+        <div class="grid" id="grid"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===================== BUILD VIEW ===================== -->
+  <div class="view" id="buildView">
+
+    <div class="panel">
+      <div class="panel-head">
+        <span>import from an existing insert (optional)</span>
+        <div class="dots"><span></span><span></span><span></span></div>
+      </div>
+      <textarea id="importInput" style="min-height:110px;" placeholder="Paste any real INSERT statement copied from your table (e.g. from a DB export or another query tool) — its columns and sample values will populate the form below, ready for you to edit."></textarea>
+      <div class="toolbar">
+        <button class="primary" id="importBtn">Import columns &amp; values →</button>
+        <button class="ghost" id="importClearBtn">Clear</button>
+        <div class="spacer"></div>
+        <span class="hint">this replaces the columns &amp; rows below — pulls every row if it's a bulk insert</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span>table &amp; columns</span>
+        <div class="dots"><span></span><span></span><span></span></div>
+      </div>
+      <div class="field-row">
+        <span class="drag-idx">tbl</span>
+        <input type="text" id="buildTableName" class="col-name" placeholder="table_name" value="customer_orders" style="flex:0 0 220px;">
+        <span class="hint">this is the table your INSERT will target</span>
+      </div>
+      <div class="field-row">
+        <span class="drag-idx">db</span>
+        <select id="dialectSelect" style="flex:0 0 220px; font-size:12.5px; padding:8px 10px;">
+          <option value="ansi">ANSI / Generic SQL</option>
+          <option value="postgres" selected>PostgreSQL</option>
+          <option value="mysql">MySQL</option>
+          <option value="sqlserver">SQL Server (T-SQL)</option>
+          <option value="oracle">Oracle</option>
+        </select>
+        <label class="hint" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="quoteIdentifiersChk" style="accent-color:#E3A542;">
+          quote identifiers
+        </label>
+        <span class="hint" id="dialectNote" style="flex:1; text-align:right;"></span>
+      </div>
+      <div id="fieldList"></div>
+      <div class="build-footer">
+        <button class="ghost" id="addFieldBtn">+ Add column</button>
+        <div class="spacer"></div>
+        <span class="hint">column order here = column order in the SQL</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span>row values</span>
+        <div class="dots"><span></span><span></span><span></span></div>
+      </div>
+      <div class="tabs" id="buildTabs" style="padding: 12px 14px 0;"></div>
+      <div id="recordFields"></div>
+      <div class="build-footer">
+        <button class="ghost" id="addRecordBtn">+ Add another row</button>
+        <button class="ghost" id="duplicateRecordBtn">Duplicate this row</button>
+        <div class="spacer"></div>
+        <button class="primary" id="generateBtn">Generate INSERT →</button>
+      </div>
+    </div>
+
+    <div class="banner" id="buildBanner"></div>
+
+    <div class="sql-output panel" id="sqlOutput">
+      <div class="panel-head">
+        <span>generated sql</span>
+        <div style="display:flex; gap:8px;">
+          <button class="copy-btn" id="copySqlBtn">COPY</button>
+          <button class="copy-btn" id="sendToTraceBtn">OPEN IN TRACE →</button>
+        </div>
+      </div>
+      <pre id="sqlOutputPre"></pre>
+    </div>
+
+  </div>
+
+  <footer>
+    parsing happens entirely in your browser — nothing is sent anywhere
+    <div class="signature">built by <span>Khushal</span></div>
+  </footer>
+</div>
+
+<script>
+(function(){
+
+  // ============================================================
+  // Shared helpers
+  // ============================================================
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s){ return escapeHtml(s).replace(/\n/g, ' '); }
+  function uid(){ return Math.random().toString(36).slice(2, 9); }
+
+  function classifyValue(raw){
+    const t = raw.trim();
+    if (/^null$/i.test(t)) return { type: 'null', display: 'NULL' };
+    if (/^'(?:[^']|'')*'$/.test(t)) return { type: 'string', display: t.slice(1, -1).replace(/''/g, "'") };
+    if (/^-?\d+(\.\d+)?$/.test(t)) return { type: 'number', display: t };
+    if (/^(true|false)$/i.test(t)) return { type: 'boolean', display: t.toUpperCase() };
+    return { type: 'expr', display: t };
+  }
+
+  // ============================================================
+  // Mode switching
+  // ============================================================
+
+  const modeTraceBtn = document.getElementById('modeTraceBtn');
+  const modeBuildBtn = document.getElementById('modeBuildBtn');
+  const traceView = document.getElementById('traceView');
+  const buildView = document.getElementById('buildView');
+
+  function setMode(mode){
+    if (mode === 'trace'){
+      modeTraceBtn.classList.add('active');
+      modeBuildBtn.classList.remove('active');
+      traceView.classList.add('active');
+      buildView.classList.remove('active');
+    } else {
+      modeBuildBtn.classList.add('active');
+      modeTraceBtn.classList.remove('active');
+      buildView.classList.add('active');
+      traceView.classList.remove('active');
+    }
+  }
+  modeTraceBtn.addEventListener('click', () => setMode('trace'));
+  modeBuildBtn.addEventListener('click', () => setMode('build'));
+
+  // ============================================================
+  // TRACE MODE (SQL -> table)
+  // ============================================================
+
+  function splitTopLevel(str, delim){
+    const parts = [];
+    let depth = 0, current = '', quoteChar = null;
+    for (let i = 0; i < str.length; i++){
+      const ch = str[i];
+      if (quoteChar){
+        current += ch;
+        if (ch === quoteChar){
+          if (str[i+1] === quoteChar){ current += str[i+1]; i++; }
+          else quoteChar = null;
+        }
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === '`'){ quoteChar = ch; current += ch; continue; }
+      if (ch === '('){ depth++; current += ch; continue; }
+      if (ch === ')'){ depth--; current += ch; continue; }
+      if (ch === delim && depth === 0){ parts.push(current); current = ''; continue; }
+      current += ch;
+    }
+    if (current.trim() !== '') parts.push(current);
+    return parts.map(p => p.trim());
+  }
+
+  function extractParenGroups(str){
+    const groups = [];
+    let i = 0;
+    const n = str.length;
+    while (i < n){
+      if (str[i] === '('){
+        let depth = 1, j = i + 1, quoteChar = null;
+        const contentStart = i + 1;
+        while (j < n && depth > 0){
+          const ch = str[j];
+          if (quoteChar){
+            if (ch === quoteChar){
+              if (str[j+1] === quoteChar){ j += 2; continue; }
+              quoteChar = null;
+            }
+            j++; continue;
+          }
+          if (ch === "'" || ch === '"' || ch === '`'){ quoteChar = ch; j++; continue; }
+          if (ch === '(') depth++;
+          if (ch === ')') depth--;
+          j++;
+        }
+        groups.push(str.slice(contentStart, j - 1));
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    return groups;
+  }
+
+  function cleanIdent(s){
+    return s.trim().replace(/^[`"\[]+|[`"\]]+$/g, '');
+  }
+
+  function parseStatement(sql){
+    const headerRe = /INSERT\s+INTO\s+([^\s(]+)\s*\(([\s\S]*?)\)\s*VALUES/i;
+    const m = sql.match(headerRe);
+    if (!m) return null;
+
+    const table = cleanIdent(m[1]);
+    const columns = splitTopLevel(m[2], ',').map(cleanIdent);
+    const afterValues = sql.slice(m.index + m[0].length);
+    const rowGroups = extractParenGroups(afterValues);
+    if (rowGroups.length === 0) return null;
+
+    const rows = rowGroups.map(g => splitTopLevel(g, ',').map(v => v.trim()));
+    return { table, columns, rows };
+  }
+
+  function splitStatements(sql){
+    return splitTopLevel(sql, ';').filter(s => s.trim().length > 0);
+  }
+
+  function parseAll(sql){
+    const stmts = splitStatements(sql);
+    const results = [];
+    stmts.forEach((stmt, i) => {
+      const parsed = parseStatement(stmt);
+      if (parsed) results.push({ stmtIndex: i, ...parsed });
+    });
+    return results;
+  }
+
+  const els = {
+    input: document.getElementById('sqlInput'),
+    parseBtn: document.getElementById('parseBtn'),
+    sampleBtn: document.getElementById('sampleBtn'),
+    clearBtn: document.getElementById('clearBtn'),
+    banner: document.getElementById('traceBanner'),
+    results: document.getElementById('results'),
+    metaRow: document.getElementById('metaRow'),
+    tabs: document.getElementById('tabs'),
+    tableName: document.getElementById('tableName'),
+    grid: document.getElementById('grid'),
+    copyAllBtn: document.getElementById('copyAllBtn'),
+  };
+
+  let records = [];
+  let activeIdx = 0;
+
+  const WIRE_SVG = '<svg width="16" height="10" viewBox="0 0 16 10"><path d="M0 5 L16 5" stroke="#5B6478" stroke-width="1.4"/><circle cx="16" cy="5" r="2" fill="#E3A542"/></svg>';
+
+  function showBanner(bannerEl, msg, kind){
+    bannerEl.textContent = msg;
+    bannerEl.className = 'banner ' + kind;
+  }
+  function hideBanner(bannerEl){
+    bannerEl.className = 'banner';
+    bannerEl.textContent = '';
+  }
+
+  function buildRecords(parsedStmts){
+    const out = [];
+    parsedStmts.forEach(stmt => {
+      stmt.rows.forEach((row, rowIndex) => {
+        out.push({ table: stmt.table, columns: stmt.columns, values: row, stmtIndex: stmt.stmtIndex, rowIndex });
+      });
+    });
+    return out;
+  }
+
+  function renderTabs(){
+    els.tabs.innerHTML = '';
+    if (records.length <= 1){ els.tabs.style.display = 'none'; return; }
+    els.tabs.style.display = 'flex';
+    records.forEach((rec, i) => {
+      const tab = document.createElement('div');
+      tab.className = 'tab' + (i === activeIdx ? ' active' : '');
+      const multiStmt = new Set(records.map(r => r.stmtIndex)).size > 1;
+      let label = multiStmt ? `Stmt ${rec.stmtIndex + 1} · Row ${rec.rowIndex + 1}` : `Row ${rec.rowIndex + 1}`;
+      tab.textContent = label;
+      if (rec.columns.length !== rec.values.length){
+        const dot = document.createElement('span');
+        dot.className = 'warn-dot';
+        tab.appendChild(dot);
+      }
+      tab.addEventListener('click', () => { activeIdx = i; renderActive(); });
+      els.tabs.appendChild(tab);
+    });
+  }
+
+  function renderMeta(){
+    const totalStmts = new Set(records.map(r => r.stmtIndex)).size;
+    els.metaRow.innerHTML = `
+      <span class="meta-chip"><b>${records.length}</b>&nbsp;record${records.length === 1 ? '' : 's'} found</span>
+      <span class="meta-chip"><b>${totalStmts}</b>&nbsp;statement${totalStmts === 1 ? '' : 's'}</span>
+    `;
+  }
+
+  function renderActive(){
+    const rec = records[activeIdx];
+    els.tableName.innerHTML = `${rec.table} <span>· ${rec.columns.length} columns / ${rec.values.length} values</span>`;
+
+    const mismatch = rec.columns.length !== rec.values.length;
+    if (mismatch){
+      showBanner(els.banner, `⚠ Column count (${rec.columns.length}) doesn't match value count (${rec.values.length}) for this row — check for a stray comma or missing value.`, 'warn');
+    } else {
+      hideBanner(els.banner);
+    }
+
+    const len = Math.max(rec.columns.length, rec.values.length);
+    let html = '';
+    for (let i = 0; i < len; i++){
+      const colName = rec.columns[i];
+      const rawVal = rec.values[i];
+      const rowMismatch = colName === undefined || rawVal === undefined;
+      const cls = classifyValue(rawVal !== undefined ? rawVal : '');
+      const displayVal = rawVal !== undefined ? cls.display : '— missing —';
+      const type = rawVal !== undefined ? cls.type : 'null';
+
+      html += `
+        <div class="grid-row ${rowMismatch ? 'mismatch' : ''}">
+          <div class="col"><span class="idx">${i+1}</span>${colName !== undefined ? escapeHtml(colName) : '— missing —'}</div>
+          <div class="wire">${WIRE_SVG}</div>
+          <div class="val type-${type}">
+            <span class="type-badge">${type}</span>
+            <span class="value-text" title="${escapeHtml(displayVal)}">${escapeHtml(displayVal)}</span>
+          </div>
+          <div class="actions">
+            <button class="copy-btn" data-copy="${escapeAttr(displayVal)}">COPY</button>
+          </div>
+        </div>
+      `;
+    }
+    els.grid.innerHTML = html;
+
+    els.grid.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(btn.getAttribute('data-copy'));
+        const orig = btn.textContent;
+        btn.textContent = 'COPIED';
+        setTimeout(() => btn.textContent = orig, 900);
+      });
+    });
+
+    renderTabs();
+  }
+
+  function runParse(){
+    const sql = els.input.value.trim();
+    if (!sql){
+      showBanner(els.banner, 'Paste an INSERT statement first.', 'error');
+      els.results.classList.remove('show');
+      return;
+    }
+    const parsed = parseAll(sql);
+    if (parsed.length === 0){
+      showBanner(els.banner, "Couldn't find a valid INSERT INTO table (columns) VALUES (...) pattern. Check that column names are wrapped in parentheses right after the table name.", 'error');
+      els.results.classList.remove('show');
+      return;
+    }
+    records = buildRecords(parsed);
+    activeIdx = 0;
+    els.results.classList.add('show');
+    renderMeta();
+    renderActive();
+  }
+
+  els.parseBtn.addEventListener('click', runParse);
+
+  els.clearBtn.addEventListener('click', () => {
+    els.input.value = '';
+    els.results.classList.remove('show');
+    hideBanner(els.banner);
+    els.input.focus();
+  });
+
+  els.sampleBtn.addEventListener('click', () => {
+    els.input.value = `INSERT INTO dlx_ddp.customer_orders
+  (order_id, customer_name, region, status, amount, discount_pct, is_priority, notes, created_at)
+VALUES
+  (10245, 'Rao, Nikhil', 'WEST', 'PENDING', 1899.50, 0.10, TRUE, NULL, NOW()),
+  (10246, 'D''Souza, Alan', 'SOUTH', 'SHIPPED', 452.00, NULL, FALSE, 'gift wrap requested', '2026-08-12 10:22:00'),
+  (10247, 'Iyer, Priya', 'NORTH', 'PENDING', 76.25, 0.05, FALSE, NULL, CURRENT_TIMESTAMP);`;
+    runParse();
+  });
+
+  els.copyAllBtn.addEventListener('click', () => {
+    const rec = records[activeIdx];
+    const obj = {};
+    const len = Math.max(rec.columns.length, rec.values.length);
+    for (let i = 0; i < len; i++){
+      const col = rec.columns[i] !== undefined ? rec.columns[i] : `__missing_col_${i}`;
+      const val = rec.values[i] !== undefined ? classifyValue(rec.values[i]).display : null;
+      obj[col] = val;
+    }
+    navigator.clipboard.writeText(JSON.stringify(obj, null, 2));
+    const orig = els.copyAllBtn.textContent;
+    els.copyAllBtn.textContent = 'COPIED';
+    setTimeout(() => els.copyAllBtn.textContent = orig, 900);
+  });
+
+  els.input.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter'){ runParse(); }
+  });
+
+  // ============================================================
+  // BUILD MODE (table -> SQL)
+  // ============================================================
+
+  const b = {
+    importInput: document.getElementById('importInput'),
+    importBtn: document.getElementById('importBtn'),
+    importClearBtn: document.getElementById('importClearBtn'),
+    tableName: document.getElementById('buildTableName'),
+    dialectSelect: document.getElementById('dialectSelect'),
+    quoteIdentifiersChk: document.getElementById('quoteIdentifiersChk'),
+    dialectNote: document.getElementById('dialectNote'),
+    fieldList: document.getElementById('fieldList'),
+    addFieldBtn: document.getElementById('addFieldBtn'),
+    buildTabs: document.getElementById('buildTabs'),
+    recordFields: document.getElementById('recordFields'),
+    addRecordBtn: document.getElementById('addRecordBtn'),
+    duplicateRecordBtn: document.getElementById('duplicateRecordBtn'),
+    generateBtn: document.getElementById('generateBtn'),
+    banner: document.getElementById('buildBanner'),
+    sqlOutput: document.getElementById('sqlOutput'),
+    sqlOutputPre: document.getElementById('sqlOutputPre'),
+    copySqlBtn: document.getElementById('copySqlBtn'),
+    sendToTraceBtn: document.getElementById('sendToTraceBtn'),
+  };
+
+  const DIALECTS = {
+    ansi:      { label: 'ANSI / Generic SQL', quoteOpen: '"',  quoteClose: '"',  boolTrue: 'TRUE',  boolFalse: 'FALSE', nowFn: 'CURRENT_TIMESTAMP', note: 'Standard TRUE/FALSE booleans, double-quoted identifiers.' },
+    postgres:  { label: 'PostgreSQL',         quoteOpen: '"',  quoteClose: '"',  boolTrue: 'TRUE',  boolFalse: 'FALSE', nowFn: 'NOW()',             note: 'Native boolean TRUE/FALSE, double-quoted identifiers.' },
+    mysql:     { label: 'MySQL',              quoteOpen: '`',  quoteClose: '`',  boolTrue: '1',     boolFalse: '0',     nowFn: 'NOW()',             note: 'No real boolean — stored as TINYINT 1/0. Identifiers use backticks.' },
+    sqlserver: { label: 'SQL Server (T-SQL)', quoteOpen: '[',  quoteClose: ']',  boolTrue: '1',     boolFalse: '0',     nowFn: 'GETDATE()',         note: 'No boolean type — BIT column takes 1/0. Identifiers use [brackets].' },
+    oracle:    { label: 'Oracle',             quoteOpen: '"',  quoteClose: '"',  boolTrue: '1',     boolFalse: '0',     nowFn: 'SYSDATE',           note: 'No native boolean pre-23ai — NUMBER(1) 1/0 is standard.' },
+  };
+
+  function currentDialect(){
+    return DIALECTS[b.dialectSelect.value] || DIALECTS.ansi;
+  }
+
+  function updateDialectNote(){
+    b.dialectNote.textContent = currentDialect().note;
+  }
+
+  function quoteIdent(name){
+    if (!b.quoteIdentifiersChk.checked) return name;
+    const d = currentDialect();
+    return d.quoteOpen + name + d.quoteClose;
+  }
+  let fields = [
+    { id: uid(), name: 'order_id' },
+    { id: uid(), name: 'customer_name' },
+    { id: uid(), name: 'status' },
+    { id: uid(), name: 'amount' },
+    { id: uid(), name: 'created_at' },
+  ];
+
+  // buildRecords: [{ id, cells: { fieldId: {type, value} } }]
+  let buildRecordList = [];
+  let activeBuildIdx = 0;
+
+  const TYPE_OPTIONS = [
+    { v: 'string', l: 'String' },
+    { v: 'number', l: 'Number' },
+    { v: 'boolean', l: 'Boolean' },
+    { v: 'null', l: 'NULL' },
+    { v: 'expr', l: 'Raw / Expr' },
+  ];
+
+  function newCell(type){
+    type = type || 'string';
+    return { type, value: type === 'boolean' ? 'TRUE' : '' };
+  }
+
+  function newRecord(){
+    const cells = {};
+    fields.forEach(f => { cells[f.id] = newCell('string'); });
+    return { id: uid(), cells };
+  }
+
+  function ensureRecordHasAllFields(){
+    buildRecordList.forEach(rec => {
+      fields.forEach(f => {
+        if (!rec.cells[f.id]) rec.cells[f.id] = newCell('string');
+      });
+    });
+  }
+
+  function renderFieldList(){
+    b.fieldList.innerHTML = '';
+    fields.forEach((f, i) => {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      row.innerHTML = `
+        <span class="drag-idx">${i + 1}</span>
+        <input type="text" class="col-name field-name-input" data-id="${f.id}" value="${escapeAttr(f.name)}" placeholder="column_name">
+        <span class="hint" style="flex:1;">column ${i + 1}</span>
+        <button class="remove-field" data-id="${f.id}" title="Remove column">✕</button>
+      `;
+      b.fieldList.appendChild(row);
+    });
+
+    b.fieldList.querySelectorAll('.field-name-input').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const f = fields.find(x => x.id === inp.getAttribute('data-id'));
+        if (f) f.name = inp.value;
+      });
+    });
+    b.fieldList.querySelectorAll('.remove-field').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        fields = fields.filter(f => f.id !== id);
+        buildRecordList.forEach(rec => delete rec.cells[id]);
+        renderFieldList();
+        renderRecordFields();
+      });
+    });
+  }
+
+  function renderBuildTabs(){
+    b.buildTabs.innerHTML = '';
+    if (buildRecordList.length <= 1){ b.buildTabs.style.display = 'none'; return; }
+    b.buildTabs.style.display = 'flex';
+    buildRecordList.forEach((rec, i) => {
+      const tab = document.createElement('div');
+      tab.className = 'tab' + (i === activeBuildIdx ? ' active' : '');
+      tab.innerHTML = `Row ${i + 1}` + (buildRecordList.length > 1 ? `<span class="tab-x" data-idx="${i}">✕</span>` : '');
+      tab.addEventListener('click', (e) => {
+        if (e.target.classList.contains('tab-x')) return;
+        activeBuildIdx = i;
+        renderRecordFields();
+      });
+      b.buildTabs.appendChild(tab);
+    });
+    b.buildTabs.querySelectorAll('.tab-x').forEach(x => {
+      x.addEventListener('click', () => {
+        const idx = parseInt(x.getAttribute('data-idx'), 10);
+        buildRecordList.splice(idx, 1);
+        if (activeBuildIdx >= buildRecordList.length) activeBuildIdx = buildRecordList.length - 1;
+        renderBuildTabs();
+        renderRecordFields();
+      });
+    });
+  }
+
+  function renderRecordFields(){
+    ensureRecordHasAllFields();
+    b.recordFields.innerHTML = '';
+    if (buildRecordList.length === 0 || fields.length === 0){
+      b.recordFields.innerHTML = `<div class="field-row"><span class="hint">Add at least one column above, then a row will appear here.</span></div>`;
+      renderBuildTabs();
+      return;
+    }
+    const rec = buildRecordList[activeBuildIdx];
+    fields.forEach((f, i) => {
+      const cell = rec.cells[f.id] || newCell('string');
+      rec.cells[f.id] = cell;
+
+      const row = document.createElement('div');
+      row.className = 'field-row';
+
+      const typeSelect = document.createElement('select');
+      TYPE_OPTIONS.forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt.v; o.textContent = opt.l;
+        if (opt.v === cell.type) o.selected = true;
+        typeSelect.appendChild(o);
+      });
+      typeSelect.addEventListener('change', () => {
+        cell.type = typeSelect.value;
+        if (cell.type === 'boolean' && !['TRUE','FALSE'].includes(cell.value)) cell.value = 'TRUE';
+        if (cell.type === 'null') cell.value = '';
+        renderRecordFields();
+      });
+
+      const label = document.createElement('span');
+      label.className = 'col-name';
+      label.style.flex = '0 0 180px';
+      label.textContent = f.name || '(unnamed)';
+
+      const cellWrap = document.createElement('div');
+      cellWrap.className = 'record-cell';
+
+      if (cell.type === 'null'){
+        cellWrap.innerHTML = `<div class="null-placeholder">NULL — no value needed</div>`;
+      } else if (cell.type === 'boolean'){
+        const d = currentDialect();
+        const sel = document.createElement('select');
+        sel.className = 'bool-select';
+        ['TRUE','FALSE'].forEach(v => {
+          const o = document.createElement('option');
+          o.value = v; o.textContent = `${v} (writes as ${v === 'TRUE' ? d.boolTrue : d.boolFalse})`;
+          if (cell.value === v) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener('change', () => { cell.value = sel.value; });
+        cellWrap.appendChild(sel);
+      } else if (cell.type === 'expr'){
+        const inpWrap = document.createElement('div');
+        inpWrap.style.display = 'flex';
+        inpWrap.style.gap = '6px';
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.style.flex = '1';
+        inp.value = cell.value;
+        inp.placeholder = 'e.g. NOW(), CURRENT_TIMESTAMP';
+        inp.addEventListener('input', () => { cell.value = inp.value; });
+        const nowBtn = document.createElement('button');
+        nowBtn.type = 'button';
+        nowBtn.className = 'copy-btn';
+        nowBtn.textContent = 'NOW()';
+        nowBtn.title = 'Insert this dialect\'s current-timestamp function';
+        nowBtn.addEventListener('click', () => { cell.value = currentDialect().nowFn; inp.value = cell.value; });
+        inpWrap.appendChild(inp);
+        inpWrap.appendChild(nowBtn);
+        cellWrap.appendChild(inpWrap);
+      } else {
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = cell.value;
+        inp.placeholder = cell.type === 'number' ? 'e.g. 1899.50' : 'e.g. Rao, Nikhil';
+        inp.addEventListener('input', () => { cell.value = inp.value; });
+        cellWrap.appendChild(inp);
+      }
+
+      row.appendChild(label);
+      row.appendChild(typeSelect);
+      row.appendChild(cellWrap);
+      b.recordFields.appendChild(row);
+    });
+    renderBuildTabs();
+  }
+
+  b.addFieldBtn.addEventListener('click', () => {
+    fields.push({ id: uid(), name: `column_${fields.length + 1}` });
+    renderFieldList();
+    renderRecordFields();
+  });
+
+  b.addRecordBtn.addEventListener('click', () => {
+    buildRecordList.push(newRecord());
+    activeBuildIdx = buildRecordList.length - 1;
+    renderBuildTabs();
+    renderRecordFields();
+  });
+
+  b.duplicateRecordBtn.addEventListener('click', () => {
+    if (buildRecordList.length === 0) return;
+    const src = buildRecordList[activeBuildIdx];
+    const copy = { id: uid(), cells: {} };
+    Object.keys(src.cells).forEach(k => { copy.cells[k] = { ...src.cells[k] }; });
+    buildRecordList.push(copy);
+    activeBuildIdx = buildRecordList.length - 1;
+    renderBuildTabs();
+    renderRecordFields();
+  });
+
+  function sqlLiteralForCell(cell, dialect){
+    switch (cell.type){
+      case 'string': return { literal: `'${String(cell.value).replace(/'/g, "''")}'`, cls: 'strv' };
+      case 'number': {
+        const v = String(cell.value).trim();
+        if (v === '' || isNaN(Number(v))) return { literal: 'NULL', cls: 'nullv', invalid: true };
+        return { literal: v, cls: 'numv' };
+      }
+      case 'boolean': return { literal: cell.value === 'FALSE' ? dialect.boolFalse : dialect.boolTrue, cls: 'boolv' };
+      case 'null': return { literal: 'NULL', cls: 'nullv' };
+      case 'expr': return { literal: cell.value.trim() === '' ? 'NULL' : cell.value.trim(), cls: 'exprv' };
+      default: return { literal: 'NULL', cls: 'nullv' };
+    }
+  }
+
+  function generateSql(){
+    hideBanner(b.banner);
+    const dialect = currentDialect();
+    const table = b.tableName.value.trim();
+    if (!table){
+      showBanner(b.banner, 'Give the table a name first.', 'error');
+      b.sqlOutput.classList.remove('show');
+      return;
+    }
+    const cleanFields = fields.filter(f => f.name.trim() !== '');
+    if (cleanFields.length === 0){
+      showBanner(b.banner, 'Add at least one column with a name.', 'error');
+      b.sqlOutput.classList.remove('show');
+      return;
+    }
+    if (buildRecordList.length === 0){
+      showBanner(b.banner, 'Add at least one row of values.', 'error');
+      b.sqlOutput.classList.remove('show');
+      return;
+    }
+
+    let hadInvalidNumber = false;
+    const rowsHtml = buildRecordList.map(rec => {
+      const parts = cleanFields.map(f => {
+        const cell = rec.cells[f.id] || newCell('string');
+        const lit = sqlLiteralForCell(cell, dialect);
+        if (lit.invalid) hadInvalidNumber = true;
+        return `<span class="${lit.cls}">${escapeHtml(lit.literal)}</span>`;
+      });
+      return '  (' + parts.join(', ') + ')';
+    });
+
+    const colList = cleanFields.map(f => escapeHtml(quoteIdent(f.name.trim()))).join(', ');
+    const html =
+      `<span class="kw">INSERT INTO</span> <span class="tbl">${escapeHtml(quoteIdent(table))}</span> (${colList})\n` +
+      `<span class="kw">VALUES</span>\n` +
+      rowsHtml.join(',\n') + ';';
+
+    b.sqlOutputPre.innerHTML = html;
+    b.sqlOutput.classList.add('show');
+
+    if (hadInvalidNumber){
+      showBanner(b.banner, "⚠ One or more Number fields weren't valid numbers — they were written as NULL. Switch that field to String if it should keep the text.", 'warn');
+    }
+  }
+
+  b.generateBtn.addEventListener('click', generateSql);
+
+  b.copySqlBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(b.sqlOutputPre.textContent);
+    const orig = b.copySqlBtn.textContent;
+    b.copySqlBtn.textContent = 'COPIED';
+    setTimeout(() => b.copySqlBtn.textContent = orig, 900);
+  });
+
+  b.sendToTraceBtn.addEventListener('click', () => {
+    els.input.value = b.sqlOutputPre.textContent;
+    setMode('trace');
+    runParse();
+  });
+
+  function importFromInsert(){
+    hideBanner(b.banner);
+    const sql = b.importInput.value.trim();
+    if (!sql){
+      showBanner(b.banner, 'Paste a sample INSERT statement above first.', 'error');
+      return;
+    }
+    const parsed = parseAll(sql);
+    if (parsed.length === 0){
+      showBanner(b.banner, "Couldn't find a valid INSERT INTO table (columns) VALUES (...) pattern in that paste.", 'error');
+      return;
+    }
+
+    // Use the first statement's column list as the column set.
+    const stmt = parsed[0];
+    b.tableName.value = stmt.table;
+
+    fields = stmt.columns.map(name => ({ id: uid(), name: name }));
+
+    buildRecordList = stmt.rows.map(row => {
+      const cells = {};
+      fields.forEach((f, i) => {
+        const raw = row[i];
+        if (raw === undefined){
+          cells[f.id] = newCell('string');
+        } else {
+          const cls = classifyValue(raw);
+          cells[f.id] = { type: cls.type, value: cls.type === 'null' ? '' : cls.display };
+        }
+      });
+      return { id: uid(), cells };
+    });
+
+    if (buildRecordList.length === 0) buildRecordList.push(newRecord());
+    activeBuildIdx = 0;
+
+    renderFieldList();
+    renderBuildTabs();
+    renderRecordFields();
+    b.sqlOutput.classList.remove('show');
+
+    const rowWord = buildRecordList.length === 1 ? 'row' : 'rows';
+    showBanner(b.banner, `Imported ${fields.length} columns and ${buildRecordList.length} ${rowWord} from "${stmt.table}". Edit any value below, then generate.`, 'warn');
+  }
+
+  b.importBtn.addEventListener('click', importFromInsert);
+  b.importClearBtn.addEventListener('click', () => {
+    b.importInput.value = '';
+    hideBanner(b.banner);
+    b.importInput.focus();
+  });
+
+  b.dialectSelect.addEventListener('change', () => {
+    updateDialectNote();
+    renderRecordFields();
+  });
+  b.quoteIdentifiersChk.addEventListener('change', () => {});
+
+  // init
+  updateDialectNote();
+  buildRecordList.push(newRecord());
+  renderFieldList();
+  renderRecordFields();
+
+})();
+</script>
+</body>
+</html>
